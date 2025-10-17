@@ -186,8 +186,8 @@ function draw(txtData,numData,tag){
       icon:L.divIcon({html:`<div class="white" style="font-size:10px">${km}KM</div>`,className:''})
     }).addTo(circleGroup);
   });
-  L.circleMarker(macau,{radius:1,color:'white',fillColor:'white',fillOpacity:0.5}).addTo(circleGroup);
-  L.marker(macau,{icon:L.divIcon({html:'<div class="white" style="font-size:12px;font-weight:bold">Macau</div>',iconAnchor:[-5,0]})}).addTo(circleGroup);
+  L.circleMarker(macau,{radius:4,color:'white',fillColor:'white',fillOpacity:0.5}).addTo(circleGroup);
+  L.marker(macau,{icon:L.divIcon({html:'<div class="green" style="font-size:12px;font-weight:bold">Macau</div>',iconAnchor:[-5,0]})}).addTo(circleGroup);
   circleGroup.addTo(map);
 
   // 彩格
@@ -235,4 +235,5 @@ document.getElementById('pngBtn').addEventListener('click',()=>{
 </body>
 
 </html>
+
 
