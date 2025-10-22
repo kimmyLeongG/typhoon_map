@@ -228,12 +228,7 @@ function draw(txtData,numData,tag){
       icon:L.divIcon({html:`<div class="white" style="font-size:10px">${km}KM</div>`,className:''})
     }).addTo(circleGroup);
   });
-  L.circleMarker(macau, {
-  radius: 3,
-  color: 'transparent',
-  fillColor: 'transparent',
-  fillOpacity: 0
-}).addTo(circleGroup);
+L.circleMarker(macau,{...}).addTo(circleGroup);
 // 1. 直接寫 inline color，不要依賴外部 CSS
 L.marker(macau, {
   icon: L.divIcon({
@@ -378,5 +373,6 @@ document.getElementById('pngBtn').addEventListener('click',()=>{
 </body>
 
 </html>
+
 
 
