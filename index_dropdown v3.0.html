@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>TC track｜按鈕優化版</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+  body{margin:0;font-family:"Segoe UI",Arial;background:#111;color:#eee;}
+  h1{margin:10px 0 6px;text-align:center;font-size:1.3rem}
+  #ctrl{background:#222;padding:8px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center}
+  #ctrl select{padding:4px;font-size:0.9rem}
+  #map{width:100%;height:80vh;background:#000}
+  #foot{text-align:center;font-size:0.7rem;color:#888;padding:4px}
+  .white{color:#fff!important}
+
+  /* 新增按鈕樣式 */
+  .btn-group{display:inline-flex;gap:4px}
+  .btn-group button{
+    border:1px solid #555;
+    background:#333;
+    color:#eee;
+    padding:4px 8px;
+    font-size:0.85rem;
+    cursor:pointer;
+    border-radius:3px;
+  }
+  .btn-group button.active{
+    background:#00bfff;
+    color:#000;
+    border-color:#00bfff;
+  }
+</style>
+</head>
+<body>
+<h1>TC track</h1>
+<div id="ctrl">
+  <!-- 季節 -->
+  <span>季節：</span>
+  <div class="btn-group" id="seasonGroup">
+    <button data-season="Summer">夏季</button>
+    <button data-season="Autumn">秋季</button>
+  </div>
+
+  <!-- 強度 -->
+  <span>強度：</span>
+  <div class="btn-group" id="intensityGroup">
+    <button data-intensity="td">TD</button>
+    <button data-intensity="ts">TS</button>
+    <button data-intensity="sts">STS</button>
+    <button data-intensity="ty">TY</button>
+    <button data-intensity="ststy">STS+TY</button>
+    <button data-intensity="all">ALL</button>
+  </div>
+
+  <!-- 測站 -->
+  <label>測站：
+    <select id="stationSelect">
+      <option value="">-- 請選擇 --</option>
+      <option value="PG">PG</option>
+      <option value="PN">PN</option>
+      <option value="PS">PS</option>
+      <option value="PV">PV</option>
+      <option value="TG">TG</option>
+      <option value="TV">TV</option>
+    </select>
+  </label>
+
+  <button id="loadBtn">載入並繪圖</button>
+  <button id="pngBtn">下載 PNG</button>
+</div>
+<div id="map"></div>
+<div id="foot">Macau 中心 | 100–800 km 圈 | 0 白 1–8 彩虹階</div>
+
+<script>
+/* ========== 基本底圖 ========== */
+window.addEventListener('DOMContentLoaded', () => {
+const map = L.map('map').setView([19.5, 113], 6);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap contributors & CARTO'
+}).addTo(map);
+
+/* ========== 工具 ========== */
+function odvColor(v){
+  if(v<=0) return '#ffffff';
+  const t=Math.min(1,Math.max(0,v/8));
+  const r=Math.round(255*(t<.5?0:2*t-1));
+  const g=Math.round(255*(t<.5?2*t:2-2*t));
+  const b=Math.round(255*(t<.25?1-4*t:0));
+  return `rgb(${r},${g},${b})`;
+}
+
+/* ========== 檔案清單（與原檔相同，僅供對照） ========== */
+const fileTable={
+  Summer:{
+    td:{ PG:['data/Summer_td_PG_wd_path.txt','data/Summer_td_PG_wd_path_num.txt'],
+         PN:['data/Summer_td_PN_wd_path.txt','data/Summer_td_PN_wd_path_num.txt'],
+         PS:['data/Summer_td_PS_wd_path.txt','data/Summer_td_PS_wd_path_num.txt'],
+         PV:['data/Summer_td_PV_wd_path.txt','data/Summer_td_PV_wd_path_num.txt'],
+         TG:['data/Summer_td_TG_wd_path.txt','data/Summer_td_TG_wd_path_num.txt'],
+         TV:['data/Summer_td_TV_wd_path.txt','data/Summer_td_TV_wd_path_num.txt'] },
+    ts:{ PG:['data/Summer_ts_PG_wd_path.txt','data/Summer_ts_PG_wd_path_num.txt'],
+         PN:['data/Summer_ts_PN_wd_path.txt','data/Summer_ts_PN_wd_path_num.txt'],
+         PS:['data/Summer_ts_PS_wd_path.txt','data/Summer_ts_PS_wd_path_num.txt'],
+         PV:['data/Summer_ts_PV_wd_path.txt','data/Summer_ts_PV_wd_path_num.txt'],
+         TG:['data/Summer_ts_TG_wd_path.txt','data/Summer_ts_TG_wd_path_num.txt'],
+         TV:['data/Summer_ts_TV_wd_path.txt','data/Summer_ts_TV_wd_path_num.txt'] },
+    sts:{ PG:['data/Summer_sts_PG_wd_path.txt','data/Summer_sts_PG_wd_path_num.txt'],
+          PN:['data/Summer_sts_PN_wd_path.txt','data/Summer_sts_PN_wd_path_num.txt'],
+          PS:['data/Summer_sts_PS_wd_path.txt','data/Summer_sts_PS_wd_path_num.txt'],
+          PV:['data/Summer_sts_PV_wd_path.txt','data/Summer_sts_PV_wd_path_num.txt'],
+          TG:['data/Summer_sts_TG_wd_path.txt','data/Summer_sts_TG_wd_path_num.txt'],
+          TV:['data/Summer_sts_TV_wd_path.txt','data/Summer_sts_TV_wd_path_num.txt'] },
+    ty:{ PG:['data/Summer_ty_PG_wd_path.txt','data/Summer_ty_PG_wd_path_num.txt'],
+         PN:['data/Summer_ty_PN_wd_path.txt','data/Summer_ty_PN_wd_path_num.txt'],
+         PS:['data/Summer_ty_PS_wd_path.txt','data/Summer_ty_PS_wd_path_num.txt'],
+         PV:['data/Summer_ty_PV_wd_path.txt','data/Summer_ty_PV_wd_path_num.txt'],
+         TG:['data/Summer_ty_TG_wd_path.txt','data/Summer_ty_TG_wd_path_num.txt'],
+         TV:['data/Summer_ty_TV_wd_path.txt','data/Summer_ty_TV_wd_path_num.txt'] },
+    ststy:{ PG:['data/Summer_ststy_PG_wd_path.txt','data/Summer_ststy_PG_wd_path_num.txt'],
+            PN:['data/Summer_ststy_PN_wd_path.txt','data/Summer_ststy_PN_wd_path_num.txt'],
+            PS:['data/Summer_ststy_PS_wd_path.txt','data/Summer_ststy_PS_wd_path_num.txt'],
+            PV:['data/Summer_ststy_PV_wd_path.txt','data/Summer_ststy_PV_wd_path_num.txt'],
+            TG:['data/Summer_ststy_TG_wd_path.txt','data/Summer_ststy_TG_wd_path_num.txt'],
+            TV:['data/Summer_ststy_TV_wd_path.txt','data/Summer_ststy_TV_wd_path_num.txt'] },
+    all:{ PG:['data/Summer_all_PG_wd_path.txt','data/Summer_all_PG_wd_path_num.txt'],
+          PN:['data/Summer_all_PN_wd_path.txt','data/Summer_all_PN_wd_path_num.txt'],
+          PS:['data/Summer_all_PS_wd_path.txt','data/Summer_all_PS_wd_path_num.txt'],
+          PV:['data/Summer_all_PV_wd_path.txt','data/Summer_all_PV_wd_path_num.txt'],
+          TG:['data/Summer_all_TG_wd_path.txt','data/Summer_all_TG_wd_path_num.txt'],
+          TV:['data/Summer_all_TV_wd_path.txt','data/Summer_all_TV_wd_path_num.txt'] }
+  },
+  Autumn:{
+    td:{ PG:['data/Autumn_td_PG_wd_path.txt','data/Autumn_td_PG_wd_path_num.txt'],
+         PN:['data/Autumn_td_PN_wd_path.txt','data/Autumn_td_PN_wd_path_num.txt'],
+         PS:['data/Autumn_td_PS_wd_path.txt','data/Autumn_td_PS_wd_path_num.txt'],
+         PV:['data/Autumn_td_PV_wd_path.txt','data/Autumn_td_PV_wd_path_num.txt'],
+         TG:['data/Autumn_td_TG_wd_path.txt','data/Autumn_td_TG_wd_path_num.txt'],
+         TV:['data/Autumn_td_TV_wd_path.txt','data/Autumn_td_TV_wd_path_num.txt'] },
+    ts:{ PG:['data/Autumn_ts_PG_wd_path.txt','data/Autumn_ts_PG_wd_path_num.txt'],
+         PN:['data/Autumn_ts_PN_wd_path.txt','data/Autumn_ts_PN_wd_path_num.txt'],
+         PS:['data/Autumn_ts_PS_wd_path.txt','data/Autumn_ts_PS_wd_path_num.txt'],
+         PV:['data/Autumn_ts_PV_wd_path.txt','data/Autumn_ts_PV_wd_path_num.txt'],
+         TG:['data/Autumn_ts_TG_wd_path.txt','data/Autumn_ts_TG_wd_path_num.txt'],
+         TV:['data/Autumn_ts_TV_wd_path.txt','data/Autumn_ts_TV_wd_path_num.txt'] },
+    sts:{ PG:['data/Autumn_sts_PG_wd_path.txt','data/Autumn_sts_PG_wd_path_num.txt'],
+          PN:['data/Autumn_sts_PN_wd_path.txt','data/Autumn_sts_PN_wd_path_num.txt'],
+          PS:['data/Autumn_sts_PS_wd_path.txt','data/Autumn_sts_PS_wd_path_num.txt'],
+          PV:['data/Autumn_sts_PV_wd_path.txt','data/Autumn_sts_PV_wd_path_num.txt'],
+          TG:['data/Autumn_sts_TG_wd_path.txt','data/Autumn_sts_TG_wd_path_num.txt'],
+          TV:['data/Autumn_sts_TV_wd_path.txt','data/Autumn_sts_TV_wd_path_num.txt'] },
+    ty:{ PG:['data/Autumn_ty_PG_wd_path.txt','data/Autumn_ty_PG_wd_path_num.txt'],
+         PN:['data/Autumn_ty_PN_wd_path.txt','data/Autumn_ty_PN_wd_path_num.txt'],
+         PS:['data/Autumn_ty_PS_wd_path.txt','data/Autumn_ty_PS_wd_path_num.txt'],
+         PV:['data/Autumn_ty_PV_wd_path.txt','data/Autumn_ty_PV_wd_path_num.txt'],
+         TG:['data/Autumn_ty_TG_wd_path.txt','data/Autumn_ty_TG_wd_path_num.txt'],
+         TV:['data/Autumn_ty_TV_wd_path.txt','data/Autumn_ty_TV_wd_path_num.txt'] },
+    ststy:{ PG:['data/Autumn_ststy_PG_wd_path.txt','data/Autumn_ststy_PG_wd_path_num.txt'],
+            PN:['data/Autumn_ststy_PN_wd_path.txt','data/Autumn_ststy_PN_wd_path_num.txt'],
+            PS:['data/Autumn_ststy_PS_wd_path.txt','data/Autumn_ststy_PS_wd_path_num.txt'],
+            PV:['data/Autumn_ststy_PV_wd_path.txt','data/Autumn_ststy_PV_wd_path_num.txt'],
+            TG:['data/Autumn_ststy_TG_wd_path.txt','data/Autumn_ststy_TG_wd_path_num.txt'],
+            TV:['data/Autumn_ststy_TV_wd_path.txt','data/Autumn_ststy_TV_wd_path_num.txt'] },
+    all:{ PG:['data/Autumn_all_PG_wd_path.txt','data/Autumn_all_PG_wd_path_num.txt'],
+          PN:['data/Autumn_all_PN_wd_path.txt','data/Autumn_all_PN_wd_path_num.txt'],
+          PS:['data/Autumn_all_PS_wd_path.txt','data/Autumn_all_PS_wd_path_num.txt'],
+          PV:['data/Autumn_all_PV_wd_path.txt','data/Autumn_all_PV_wd_path_num.txt'],
+          TG:['data/Autumn_all_TG_wd_path.txt','data/Autumn_all_TG_wd_path_num.txt'],
+          TV:['data/Autumn_all_TV_wd_path.txt','data/Autumn_all_TV_wd_path_num.txt'] }
+  }
+};
+
+/* ========== 全域圖層變數 ========== */
+let gridGroup, txtGroup, circleGroup, trackLayer;
+
+/* ========== 按鈕群組事件 ========== */
+document.querySelectorAll('#seasonGroup button').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('#seasonGroup button').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+document.querySelectorAll('#intensityGroup button').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('#intensityGroup button').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+/* ========== 載入並繪圖 ========== */
+document.getElementById('loadBtn').addEventListener('click', () => {
+  const season=document.querySelector('#seasonGroup button.active')?.dataset.season;
+  const intensity=document.querySelector('#intensityGroup button.active')?.dataset.intensity;
+  const station=document.getElementById('stationSelect').value;
+  if(!season){alert('請選擇季節');return;}
+  if(!intensity){alert('請選擇強度');return;}
+  if(!station){alert('請選擇測站');return;}
+
+  const [pathUrl,numUrl]=fileTable[season][intensity][station];
+  Promise.all([
+    fetch(pathUrl).then(r=>r.text()),
+    fetch(numUrl).then(r=>r.text())
+  ]).then(([txt,num])=>draw(txt,num,`${season}_${intensity}_${station}`))
+  .catch(err=>alert('讀取檔案失敗：'+err));
+});
+
+/* ========== 繪圖核心（與原檔相同，僅移除開頭的 gridGroup/txtGroup/circleGroup/trackLayer 清除） ========== */
+function draw(txtData,numData,tag){
+  if(gridGroup) map.removeLayer(gridGroup);
+  if(txtGroup)  map.removeLayer(txtGroup);
+  if(circleGroup) map.removeLayer(circleGroup);
+  if(trackLayer)  map.removeLayer(trackLayer);
+
+  let txtGrid=txtData.trim().split('\n').map(r=>r.trim().split(/\s+/));
+  let numGrid=numData.trim().split('\n').map(r=>r.trim().split(/\s+/).map(Number));
+  txtGrid.reverse(); numGrid.reverse();
+  if(txtGrid.length!==12||txtGrid[0].length!==15){alert('文字檔需 12×15');return;}
+  if(numGrid.length!==12||numGrid[0].length!==15){alert('數值檔需 12×15');return;}
+
+  circleGroup=L.layerGroup();
+  const macau=[22.17,113.57];
+  [100,200,400,600,800].forEach(km=>{
+    L.circle(macau,{radius:km*1000,color:'white',weight:1,fill:false,dashArray:'6,6'}).addTo(circleGroup);
+    const labelLat=22.17-km/111.32;
+    L.marker([labelLat,113.3],{
+      icon:L.divIcon({html:`<div class="white" style="font-size:10px">${km}KM</div>`,className:''})
+    }).addTo(circleGroup);
+  });
+  L.circleMarker(macau,{radius:6,color:'white',fillColor:'white',fillOpacity:1}).addTo(circleGroup);
+  L.marker(macau,{icon:L.divIcon({html:'<div class="white" style="font-size:12px;font-weight:bold">Macau</div>',iconAnchor:[-5,0]})}).addTo(circleGroup);
+  circleGroup.addTo(map);
+
+  gridGroup=L.layerGroup();
+  for(let i=0;i<12;i++){
+    for(let j=0;j<15;j++){
+      const lat1=25-i, lat2=24-i, lon1=106+j, lon2=107+j;
+      L.rectangle([[lat1,lon1],[lat2,lon2]], {
+        color: 'none',
+        fillColor: odvColor(numGrid[i][j]),
+        fillOpacity: 0.75
+      }).addTo(gridGroup);
+    }
+  }
+  gridGroup.addTo(map);
+
+  txtGroup=L.layerGroup();
+  for(let i=0;i<12;i++){
+    for(let j=0;j<15;j++){
+      const lat=24.5-i, lon=106.5+j;
+      L.marker([lat,lon],{
+        icon:L.divIcon({
+          html:`<span style="color:#fff;font-size:10px">${txtGrid[i][j]}</span>`,
+          className:'',iconSize:null,iconAnchor:[0,0]
+        })
+      }).addTo(txtGroup);
+    }
+  }
+  txtGroup.addTo(map);
+}
+
+/* ========== CSV 上傳（與原檔相同） ========== */
+const uploadInput=document.createElement('input');
+uploadInput.type='file';
+uploadInput.accept='.csv';
+uploadInput.style.display='none';
+document.body.appendChild(uploadInput);
+
+const uploadBtn=document.createElement('button');
+uploadBtn.textContent='上傳 CSV 路徑';
+uploadBtn.id='uploadBtn';
+document.getElementById('ctrl').appendChild(uploadBtn);
+
+uploadBtn.addEventListener('click',()=>uploadInput.click());
+
+uploadInput.addEventListener('change', e=>{
+  const file=e.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=evt=>{
+    const lines=evt.target.result.split(/\r?\n/).filter(l=>l.trim());
+    if(lines.length<2){alert('CSV 至少需 2 行');return;}
+    const pts=[];
+    const header=lines[0].split(',').map(h=>h.trim());
+    const startIndex=isNaN(parseFloat(lines[1].split(',')[3]))?1:0;
+    for(let i=startIndex;i<lines.length;i++){
+      const cols=lines[i].split(',');
+      if(cols.length<5)continue;
+      const lat=parseFloat(cols[3]),lon=parseFloat(cols[4]);
+      if(isNaN(lat)||isNaN(lon))continue;
+      pts.push([lat,lon,cols[2]||'']);
+    }
+    if(pts.length<2){alert('有效座標少於 2 點');return;}
+    const csvName = file.name.replace(/\.csv$/i, '');   // 去掉副檔名
+    plotTrack(pts, csvName);
+  };
+  reader.readAsText(file);
+});
+
+function plotTrack(points, csvName = ''){
+  if(trackLayer) map.removeLayer(trackLayer);
+  trackLayer = L.layerGroup();
+  const latlngs = points.map(p => [p[0], p[1]]);
+
+  /* 1. 路徑線 */
+  L.polyline(latlngs, { color: '#bebeff', weight: 3 }).addTo(trackLayer);
+
+  /* 2. 起點：圓圈 + 檔名 */
+  const start = latlngs[0];
+  L.circleMarker(start, {
+    radius: 6,
+    color: '#000000',
+    fillColor: '#000000',
+    fillOpacity: 1,
+    title: '起點'
+  }).bindTooltip('起點', { permanent: false }).addTo(trackLayer);
+
+  // 檔名標籤
+  if (csvName) {
+    L.marker([start[0], start[1]], {
+      icon: L.divIcon({
+        html: `<div style="color:#000000;font-size:12px;font-weight:bold;margin-left:10px">${csvName}</div>`,
+        className: '',
+        iconAnchor: [0, 6]
+      })
+    }).addTo(trackLayer);
+  }
+
+  /* 3. 終點 */
+  L.circleMarker(latlngs[latlngs.length - 1], {
+    radius: 6,
+    color: '#ffffff',
+    fillColor: '#ffffff',
+    fillOpacity: 1,
+    title: '終點'
+  }).bindTooltip('終點', { permanent: false }).addTo(trackLayer);
+
+  /* 4. 中間點 */
+  points.forEach((p, idx) => {
+    if (idx === 0 || idx === points.length - 1) return;
+    L.circleMarker([p[0], p[1]], { radius: 4, color: '#ffffff', weight: 1, fillOpacity: 0 })
+      .bindTooltip(p[2] || `${p[0].toFixed(2)},${p[1].toFixed(2)}`, { permanent: false })
+      .addTo(trackLayer);
+  });
+
+  trackLayer.addTo(map);
+  map.fitBounds(L.latLngBounds(latlngs), { padding: [20, 20] });
+}
+/* ========== 下載 PNG（與原檔相同） ========== */
+document.getElementById('pngBtn').addEventListener('click',()=>{
+  html2canvas(document.getElementById('map'),{useCORS:true,backgroundColor:'#000'})
+    .then(canvas=>{
+      const a=document.createElement('a');
+      a.download='TCtrack.png';
+      a.href=canvas.toDataURL();
+      a.click();
+    });
+});
+});
+</script>
+</body>
+</html>
