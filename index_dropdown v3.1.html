@@ -229,8 +229,19 @@ function draw(txtData,numData,tag){
     }).addTo(circleGroup);
   });
   L.circleMarker(macau,{radius:6,color:'white',fillColor:'white',fillOpacity:1}).addTo(circleGroup);
-  L.marker(macau,{icon:L.divIcon({html:'<div class="white" style="font-size:16px;font-weight:bold">Macau</div>',iconAnchor:[-5,0]})}).addTo(circleGroup);
-  circleGroup.addTo(map);
+// 1. 直接寫 inline color，不要依賴外部 CSS
+L.marker(macau, {
+  icon: L.divIcon({
+    html: '<div style="color:#fff;' +        // 確保白字
+                 'background:rgba(0,0,0,.5);' + // 半透明黑底，讓白字浮出
+                 'padding:2px 4px;' +
+                 'font-size:12px;' +
+                 'font-weight:bold;">Macau</div>',
+    iconAnchor: [-5, 0]
+  })
+}).addTo(circleGroup);
+
+circleGroup.addTo(map);
 
   gridGroup=L.layerGroup();
   for(let i=0;i<12;i++){
@@ -362,3 +373,4 @@ document.getElementById('pngBtn').addEventListener('click',()=>{
 </body>
 
 </html>
+
