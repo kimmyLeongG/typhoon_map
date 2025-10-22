@@ -229,7 +229,7 @@ function draw(txtData,numData,tag){
     }).addTo(circleGroup);
   });
   L.circleMarker(macau,{radius:6,color:'white',fillColor:'white',fillOpacity:1}).addTo(circleGroup);
-  L.marker(macau,{icon:L.divIcon({html:'<div class="white" style="font-size:12px;font-weight:bold">Macau</div>',iconAnchor:[-5,0]})}).addTo(circleGroup);
+  L.marker(macau,{icon:L.divIcon({html:'<div class="white" style="font-size:16px;font-weight:bold">Macau</div>',iconAnchor:[-5,0]})}).addTo(circleGroup);
   circleGroup.addTo(map);
 
   gridGroup=L.layerGroup();
@@ -360,4 +360,5 @@ document.getElementById('pngBtn').addEventListener('click',()=>{
 });
 </script>
 </body>
+
 </html>
