@@ -240,7 +240,7 @@ L.marker(macau, {
     html: '<div style="color:#fff;' +        // 確保白字
                  'background:rgba(0,0,0,.5);' + // 半透明黑底，讓白字浮出
                  'padding:2px 4px;' +
-                 'font-size:12px;' +
+                 'font-size:16px;' +
                  'font-weight:bold;">Macau</div>',
     iconAnchor: [0, 8]
   })
@@ -267,7 +267,7 @@ circleGroup.addTo(map);
       const lat=24.5-i, lon=106.5+j;
       L.marker([lat,lon],{
         icon:L.divIcon({
-          html:`<span style="color:#fff;font-size:10px">${txtGrid[i][j]}</span>`,
+          html:`<span style="color:#fff;font-size:14px">${txtGrid[i][j]}</span>`,
           className:'',iconSize:null,iconAnchor:[0,0]
         })
       }).addTo(txtGroup);
@@ -320,7 +320,7 @@ function plotTrack(points, csvName = ''){
   const latlngs = points.map(p => [p[0], p[1]]);
 
   /* 1. 路徑線 */
-  L.polyline(latlngs, { color: '#bebeff', weight: 3 }).addTo(trackLayer);
+  L.polyline(latlngs, { color: '#bebeff', weight: 5 }).addTo(trackLayer);
 
   /* 2. 起點：圓圈 + 檔名 */
   const start = latlngs[0];
@@ -336,7 +336,7 @@ function plotTrack(points, csvName = ''){
   if (csvName) {
     L.marker([start[0], start[1]], {
       icon: L.divIcon({
-        html: `<div style="color:#ffffff;font-size:14px;font-weight:bold;margin-left:10px">${csvName}</div>`,
+        html: `<div style="color:#ffffff;font-size:14px;font-weight:bold;margin-left:12px">${csvName}</div>`,
         className: '',
         iconAnchor: [0, 6]
       })
@@ -378,6 +378,7 @@ document.getElementById('pngBtn').addEventListener('click',()=>{
 </body>
 
 </html>
+
 
 
 
