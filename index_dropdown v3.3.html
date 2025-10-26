@@ -89,7 +89,7 @@ function odvColor(v){
   return `rgb(${r},${g},${b})`;
 }
 
-/* ========== 檔案清單（略，同 v3.2） ========== */
+/* ========== 檔案清單 ========== */
 const fileTable={
   Summer:{
     td:{ PG:['data/Summer_td_PG_wd_path.txt','data/Summer_td_PG_wd_path_num.txt'],
@@ -172,7 +172,7 @@ const fileTable={
 /* ========== 全域圖層變數 ========== */
 let gridGroup, txtGroup, circleGroup, trackLayer;
 
-/* ========== 按鈕群組事件（略，同 v3.2） ========== */
+/* ========== 按鈕群組事件 ========== */
 document.querySelectorAll('#seasonGroup button').forEach(btn=>{
   btn.addEventListener('click',function(){
     document.querySelectorAll('#seasonGroup button').forEach(b=>b.classList.remove('active'));
@@ -247,7 +247,7 @@ function draw(txtData,numData,tag){
       L.rectangle([[lat1,lon1],[lat2,lon2]], {
         color: 'none',
         fillColor: odvColor(numGrid[i][j]),
-        fillOpacity: 0.85          // 透明度提高
+        fillOpacity: 0.5          // 透明度提高
       }).addTo(gridGroup);
     }
   }
@@ -370,3 +370,4 @@ document.getElementById('clearTrackBtn').addEventListener('click', () => {
 </body>
 
 </html>
+
