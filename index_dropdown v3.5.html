@@ -97,7 +97,7 @@ function getStyle(v){
   // ★★★ 2. 文字顏色 ★★★
    //  A. 0 不顯示文字：textColor = 'transparent'
   //  B. 0 同網格色： textColor = fillColor
-  const textColor = (level === 0) ? 'transparent' : '#ffffff';   // ★改這行切換★
+  const textColor = (level === 0) ? 'fillColor' : '#ffffff';   // ★改這行切換★
 
   return { fillColor, fillOpacity, textColor };
 }
@@ -359,5 +359,6 @@ document.getElementById('clearTrackBtn').addEventListener('click', () => {
 </body>
 
 </html>
+
 
 
