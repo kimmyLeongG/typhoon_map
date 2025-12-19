@@ -459,7 +459,6 @@ function drawArrow(ctx,x,y,dir,spd){
   ctx.lineTo(wid,-wid);
   ctx.lineTo(wid, wid);
   ctx.closePath(); ctx.fill();
-
   ctx.restore();   // ★★★ 這一行要加括號 ★★★
 }
 
@@ -470,4 +469,5 @@ document.getElementById('toggleWindBtn').addEventListener('click',()=>{
 });
 </script>
 </body>
+
 </html>
