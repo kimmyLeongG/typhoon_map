@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<title>TC track + 風速箭頭時間序列</title>
+<title>--沙灘波測試及驗證--</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -70,11 +70,11 @@
   <button id="toggleWindBtn">開啟風速面板</button>
 </div>
 <div id="map"></div>
-<div id="foot">Macau 中心 | 100–800 km 圈 | 0 白 1–8 彩虹階</div>
+<div id="foot">--測試--測試--</div>
 
 <!-- ======== 風速面板 ======== -->
 <div id="windPanel">
-  <h2>風速時間序列</h2>
+  <h2>風向風速時間序列</h2>
   <div id="windInfo">站點：<span id="windStn"></span></div>
   <div id="windCtrl">
     取樣間隔：
@@ -339,7 +339,7 @@ document.getElementById('clearTrackBtn').addEventListener('click', () => {
 })();
 
 /* ============================================================
-   風速箭頭時間序列（與 wind-plotv5 完全相容）
+   風速箭頭時間序列
    ============================================================ */
 (function(){
 const $=id=>document.getElementById(id);
@@ -435,7 +435,7 @@ function drawArrow(ctx,x,y,dir,spd){
   const col=spd>15?'#0033cc':spd>10?'#0066ee':'#55aaff';
   ctx.save();
   ctx.translate(x,y);
-  ctx.rotate((dir-90)*Math.PI/180);   // ← 已改回半形括號
+  ctx.rotate((dir-90)*Math.PI/180);
 
   ctx.strokeStyle=col; ctx.lineWidth=2;
   ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke();
@@ -456,4 +456,5 @@ document.getElementById('toggleWindBtn').addEventListener('click',()=>{
 })();
 </script>
 </body>
+
 </html>
