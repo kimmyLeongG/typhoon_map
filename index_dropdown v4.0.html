@@ -455,9 +455,9 @@ function drawArrow(ctx,x,y,dir,spd){
   ctx.lineTo(wid,-wid);
   ctx.lineTo(wid, wid);
   ctx.closePath(); ctx.fill();
-  ctx.restore;
+  ctx.restore();
 }
-})();
+}
 
 /* ---------- 風速面板 顯示/隱藏 ---------- */
 document.getElementById('toggleWindBtn').addEventListener('click',()=>{
@@ -466,4 +466,5 @@ document.getElementById('toggleWindBtn').addEventListener('click',()=>{
 });
 </script>
 </body>
+
 </html>
