@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>沙灘波測試及驗證</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<style>
+  body{margin:0;font-family:"Segoe UI",Arial;background:#111;color:#eee;}
+  h1{margin:10px 0 6px;text-align:center;font-size:1.3rem}
+  #ctrl{background:#222;padding:8px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center}
+  #ctrl select{padding:4px;font-size:0.9rem}
+  #map{width:100%;height:60vh;background:#000}
+  #foot{text-align:center;font-size:0.7rem;color:#888;padding:4px}
+  .btn-group{display:inline-flex;gap:4px}
+  .btn-group button{
+    border:1px solid #555;background:#333;color:#eee;
+    padding:4px 8px;font-size:0.85rem;cursor:pointer;border-radius:3px;
+  }
+  .btn-group button.active{background:#00bfff;color:#000;border-color:#00bfff;}
+
+  /*==== 風速面板 ====*/
+  #windPanel{display:none;background:#fafafa;color:#333;margin-top:4px;padding:8px;}
+  #windPanel h2{margin:.2em 0;font-size:1.2rem;color:#057}
+  #windInfo{background:#e8f4ff;border-left:5px #057 solid;padding:.4rem .8rem;margin:.3rem 0;font-size:1rem}
+  #windDrop{border:2px dashed #666;border-radius:4px;padding:1rem;text-align:center;background:#fff;cursor:pointer}
+  #windDrop.dragover{background:#eef}
+  #windCtrl{margin:.5rem 0} #windCtrl select{font-size:1rem}
+  #windMsg{color:#080;font-weight:bold}#windErr{color:#c00}
+  #windCv{display:block;margin:.5rem auto;background:#fff;box-shadow:0 0 3px rgba(0,0,0,.15)}
+
+/* ===== 路徑圖例 ===== */
+#legend{
+  position:absolute;
+  bottom:30px; left:10px;
+  background:rgba(0,0,0,.65);
+  color:#fff;
+  padding:6px 10px;
+  font-size:13px;
+  line-height:1.6;
+  border-radius:4px;
+}
+.legend-item{display:flex; align-items:center; margin:2px 0}
+.legend-dot{
+  width:12px; height:12px; border-radius:50%; margin-right:8px;
+  border:1px solid rgba(255,255,255,.6);
+}
+</style>
+</head>
+<body>
+
+<h1>--沙灘波測試及驗證--</h1>
+<div id="ctrl">
+  <span>季節：</span>
+  <div class="btn-group" id="seasonGroup">
+    <button data-season="Summer">夏季</button>
+    <button data-season="Autumn">秋季</button>
+  </div>
+
+  <span>強度：</span>
+  <div class="btn-group" id="intensityGroup">
+    <button data-intensity="td">TD</button>
+    <button data-intensity="ts">TS</button>
+    <button data-intensity="sts">STS</button>
+    <button data-intensity="ty">TY</button>
+    <button data-intensity="ststy">STS+TY</button>
+    <button data-intensity="all">ALL</button>
+  </div>
+
+  <label>測站：
+    <select id="stationSelect">
+      <option value="">-- 請選擇 --</option>
+      <option value="PG">PG</option>
+      <option value="PN">PN</option>
+      <option value="PS">PS</option>
+      <option value="PV">PV</option>
+      <option value="TG">TG</option>
+      <option value="TV">TV</option>
+    </select>
+  </label>
+
+<button id="loadBtn">載入沙灘波</button>
+<button id="clearGridBtn">清空沙灘波</button>
+<button id="uploadBtn">上傳颱風路徑</button>
+<button id="clearTrackBtn">清空路徑</button>
+<button id="toggleWindBtn">風向風速數據面版</button>
+</div>
+<div id="map"></div>
+<div id="foot">--測試--測試--</div>
+
+<!-- ======== 風速面板 ======== -->
+<div id="windPanel">
+  <h2>風向風速時間序列</h2>
+  <div id="windInfo">站點：<span id="windStn"></span></div>
+  <div id="windCtrl">
+    取樣間隔：
+    <select id="windStep">
+      <option value="1">1 h</option>
+      <option value="3" selected>3 h</option>
+      <option value="6">6 h</option>
+      <option value="12">12 h</option>
+    </select>
+  </div>
+  <div id="windDrop">
+    <div>拖曳 CSV 至此，或 <input type="file" id="windFile" accept=".csv"></div>
+  </div>
+  <div id="windMsg"></div><div id="windErr"></div>
+  <canvas id="windCv" width="900" height="320"></canvas>
+</div>
+
+<script>
+/* ============================================================
+   1. 地圖 & 沙灘波核心
+   ============================================================ */
+(function(){
+const map = L.map('map').setView([19.5, 113], 6);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap contributors & CARTO'
+}).addTo(map);
+
+function getStyle(v){
+  const level = Math.round(Math.max(0, Math.min(8, v)));
+  const gridPalette = [
+    '#f5f5f5','#0571b0','#4dac26','#a6dba0','#fee08b',
+    '#fdbe73','#f16913','#d73027','#8c0000'
+  ];
+  const fillColor = gridPalette[level];
+  const fillOpacity = (level === 0) ? 0 : 0.85;
+  const textColor = (level === 0) ? 'transparent' : '#ffffff';
+  return { fillColor, fillOpacity, textColor };
+}
+
+const fileTable={
+  Summer:{
+    td:{ PG:['data/Summer_td_PG_wd_path.txt','data/Summer_td_PG_wd_path_num.txt'],
+         PN:['data/Summer_td_PN_wd_path.txt','data/Summer_td_PN_wd_path_num.txt'],
+         PS:['data/Summer_td_PS_wd_path.txt','data/Summer_td_PS_wd_path_num.txt'],
+         PV:['data/Summer_td_PV_wd_path.txt','data/Summer_td_PV_wd_path_num.txt'],
+         TG:['data/Summer_td_TG_wd_path.txt','data/Summer_td_TG_wd_path_num.txt'],
+         TV:['data/Summer_td_TV_wd_path.txt','data/Summer_td_TV_wd_path_num.txt'] },
+    ts:{ PG:['data/Summer_ts_PG_wd_path.txt','data/Summer_ts_PG_wd_path_num.txt'],
+         PN:['data/Summer_ts_PN_wd_path.txt','data/Summer_ts_PN_wd_path_num.txt'],
+         PS:['data/Summer_ts_PS_wd_path.txt','data/Summer_ts_PS_wd_path_num.txt'],
+         PV:['data/Summer_ts_PV_wd_path.txt','data/Summer_ts_PV_wd_path_num.txt'],
+         TG:['data/Summer_ts_TG_wd_path.txt','data/Summer_ts_TG_wd_path_num.txt'],
+         TV:['data/Summer_ts_TV_wd_path.txt','data/Summer_ts_TV_wd_path_num.txt'] },
+    sts:{ PG:['data/Summer_sts_PG_wd_path.txt','data/Summer_sts_PG_wd_path_num.txt'],
+          PN:['data/Summer_sts_PN_wd_path.txt','data/Summer_sts_PN_wd_path_num.txt'],
+          PS:['data/Summer_sts_PS_wd_path.txt','data/Summer_sts_PS_wd_path_num.txt'],
+          PV:['data/Summer_sts_PV_wd_path.txt','data/Summer_sts_PV_wd_path_num.txt'],
+          TG:['data/Summer_sts_TG_wd_path.txt','data/Summer_sts_TG_wd_path_num.txt'],
+          TV:['data/Summer_sts_TV_wd_path.txt','data/Summer_sts_TV_wd_path_num.txt'] },
+    ty:{ PG:['data/Summer_ty_PG_wd_path.txt','data/Summer_ty_PG_wd_path_num.txt'],
+         PN:['data/Summer_ty_PN_wd_path.txt','data/Summer_ty_PN_wd_path_num.txt'],
+         PS:['data/Summer_ty_PS_wd_path.txt','data/Summer_ty_PS_wd_path_num.txt'],
+         PV:['data/Summer_ty_PV_wd_path.txt','data/Summer_ty_PV_wd_path_num.txt'],
+         TG:['data/Summer_ty_TG_wd_path.txt','data/Summer_ty_TG_wd_path_num.txt'],
+         TV:['data/Summer_ty_TV_wd_path.txt','data/Summer_ty_TV_wd_path_num.txt'] },
+    ststy:{ PG:['data/Summer_ststy_PG_wd_path.txt','data/Summer_ststy_PG_wd_path_num.txt'],
+            PN:['data/Summer_ststy_PN_wd_path.txt','data/Summer_ststy_PN_wd_path_num.txt'],
+            PS:['data/Summer_ststy_PS_wd_path.txt','data/Summer_ststy_PS_wd_path_num.txt'],
+            PV:['data/Summer_ststy_PV_wd_path.txt','data/Summer_ststy_PV_wd_path_num.txt'],
+            TG:['data/Summer_ststy_TG_wd_path.txt','data/Summer_ststy_TG_wd_path_num.txt'],
+            TV:['data/Summer_ststy_TV_wd_path.txt','data/Summer_ststy_TV_wd_path_num.txt'] },
+    all:{ PG:['data/Summer_all_PG_wd_path.txt','data/Summer_all_PG_wd_path_num.txt'],
+          PN:['data/Summer_all_PN_wd_path.txt','data/Summer_all_PN_wd_path_num.txt'],
+          PS:['data/Summer_all_PS_wd_path.txt','data/Summer_all_PS_wd_path_num.txt'],
+          PV:['data/Summer_all_PV_wd_path.txt','data/Summer_all_PV_wd_path_num.txt'],
+          TG:['data/Summer_all_TG_wd_path.txt','data/Summer_all_TG_wd_path_num.txt'],
+          TV:['data/Summer_all_TV_wd_path.txt','data/Summer_all_TV_wd_path_num.txt'] }
+  },
+  Autumn:{
+    td:{ PG:['data/Autumn_td_PG_wd_path.txt','data/Autumn_td_PG_wd_path_num.txt'],
+         PN:['data/Autumn_td_PN_wd_path.txt','data/Autumn_td_PN_wd_path_num.txt'],
+         PS:['data/Autumn_td_PS_wd_path.txt','data/Autumn_td_PS_wd_path_num.txt'],
+         PV:['data/Autumn_td_PV_wd_path.txt','data/Autumn_td_PV_wd_path_num.txt'],
+         TG:['data/Autumn_td_TG_wd_path.txt','data/Autumn_td_TG_wd_path_num.txt'],
+         TV:['data/Autumn_td_TV_wd_path.txt','data/Autumn_td_TV_wd_path_num.txt'] },
+    ts:{ PG:['data/Autumn_ts_PG_wd_path.txt','data/Autumn_ts_PG_wd_path_num.txt'],
+         PN:['data/Autumn_ts_PN_wd_path.txt','data/Autumn_ts_PN_wd_path_num.txt'],
+         PS:['data/Autumn_ts_PS_wd_path.txt','data/Autumn_ts_PS_wd_path_num.txt'],
+         PV:['data/Autumn_ts_PV_wd_path.txt','data/Autumn_ts_PV_wd_path_num.txt'],
+         TG:['data/Autumn_ts_TG_wd_path.txt','data/Autumn_ts_TG_wd_path_num.txt'],
+         TV:['data/Autumn_ts_TV_wd_path.txt','data/Autumn_ts_TV_wd_path_num.txt'] },
+    sts:{ PG:['data/Autumn_sts_PG_wd_path.txt','data/Autumn_sts_PG_wd_path_num.txt'],
+          PN:['data/Autumn_sts_PN_wd_path.txt','data/Autumn_sts_PN_wd_path_num.txt'],
+          PS:['data/Autumn_sts_PS_wd_path.txt','data/Autumn_sts_PS_wd_path_num.txt'],
+          PV:['data/Autumn_sts_PV_wd_path.txt','data/Autumn_sts_PV_wd_path_num.txt'],
+          TG:['data/Autumn_sts_TG_wd_path.txt','data/Autumn_sts_TG_wd_path_num.txt'],
+          TV:['data/Autumn_sts_TV_wd_path.txt','data/Autumn_sts_TV_wd_path_num.txt'] },
+    ty:{ PG:['data/Autumn_ty_PG_wd_path.txt','data/Autumn_ty_PG_wd_path_num.txt'],
+         PN:['data/Autumn_ty_PN_wd_path.txt','data/Autumn_ty_PN_wd_path_num.txt'],
+         PS:['data/Autumn_ty_PS_wd_path.txt','data/Autumn_ty_PS_wd_path_num.txt'],
+         PV:['data/Autumn_ty_PV_wd_path.txt','data/Autumn_ty_PV_wd_path_num.txt'],
+         TG:['data/Autumn_ty_TG_wd_path.txt','data/Autumn_ty_TG_wd_path_num.txt'],
+         TV:['data/Autumn_ty_TV_wd_path.txt','data/Autumn_ty_TV_wd_path_num.txt'] },
+    ststy:{ PG:['data/Autumn_ststy_PG_wd_path.txt','data/Autumn_ststy_PG_wd_path_num.txt'],
+            PN:['data/Autumn_ststy_PN_wd_path.txt','data/Autumn_ststy_PN_wd_path_num.txt'],
+            PS:['data/Autumn_ststy_PS_wd_path.txt','data/Autumn_ststy_PS_wd_path_num.txt'],
+            PV:['data/Autumn_ststy_PV_wd_path.txt','data/Autumn_ststy_PV_wd_path_num.txt'],
+            TG:['data/Autumn_ststy_TG_wd_path.txt','data/Autumn_ststy_TG_wd_path_num.txt'],
+            TV:['data/Autumn_ststy_TV_wd_path.txt','data/Autumn_ststy_TV_wd_path_num.txt'] },
+    all:{ PG:['data/Autumn_all_PG_wd_path.txt','data/Autumn_all_PG_wd_path_num.txt'],
+          PN:['data/Autumn_all_PN_wd_path.txt','data/Autumn_all_PN_wd_path_num.txt'],
+          PS:['data/Autumn_all_PS_wd_path.txt','data/Autumn_all_PS_wd_path_num.txt'],
+          PV:['data/Autumn_all_PV_wd_path.txt','data/Autumn_all_PV_wd_path_num.txt'],
+          TG:['data/Autumn_all_TG_wd_path.txt','data/Autumn_all_TG_wd_path_num.txt'],
+          TV:['data/Autumn_all_TV_wd_path.txt','data/Autumn_all_TV_wd_path_num.txt'] }
+  }
+};
+
+/* 空表：由按鈕觸發時動態組檔名 */
+const fileTable={};
+
+let gridGroup, txtGroup, circleGroup, trackLayer;
+
+/* 按鈕樣式切換 */
+document.querySelectorAll('#seasonGroup button').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('#seasonGroup button').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+document.querySelectorAll('#intensityGroup button').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('#intensityGroup button').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+/* 載入沙灘波 */
+document.getElementById('loadBtn').addEventListener('click', () => {
+  const season = document.querySelector('#seasonGroup button.active')?.dataset.season;
+  const intensity = document.querySelector('#intensityGroup button.active')?.dataset.intensity;
+  const station = document.getElementById('stationSelect').value;
+  if(!season || !intensity || !station) return alert('請完成所有選擇');
+  const pathUrl = `data/${season}_${intensity}_${station}_wd_path.txt`;
+  const numUrl  = `data/${season}_${intensity}_${station}_wd_path_num.txt`;
+  Promise.all([
+    fetch(pathUrl).then(r => r.text()),
+    fetch(numUrl).then(r => r.text())
+  ]).then(([txt, num]) => drawGrid(txt, num))
+   .catch(err => alert('讀取失敗：' + err));
+});
+
+function drawGrid(txtData, numData){
+  if(gridGroup) map.removeLayer(gridGroup);
+  if(txtGroup)  map.removeLayer(txtGroup);
+  if(circleGroup) map.removeLayer(circleGroup);
+
+  let txtGrid = txtData.trim().split('\n').map(r => r.trim().split(/\s+/));
+  let numGrid = numData.trim().split('\n').map(r => r.trim().split(/\s+/).map(Number));
+  txtGrid.reverse(); numGrid.reverse();
+  if(txtGrid.length !== 12 || txtGrid[0].length !== 15) return alert('文字檔需 12×15');
+  if(numGrid.length !== 12 || numGrid[0].length !== 15) return alert('數值檔需 12×15');
+
+  circleGroup = L.layerGroup();
+  const macau = [22.17, 113.57];
+  [100, 200, 400, 600, 800].forEach(km => {
+    L.circle(macau, { radius: km * 1000, color: 'white', weight: 1, fill: false, dashArray: '6,6' }).addTo(circleGroup);
+    const labelLat = 22.17 - km / 111.32;
+    L.marker([labelLat, 113.3], { icon: L.divIcon({ html: `<div style="color:#fff;font-size:10px">${km}KM</div>`, className: '' }) }).addTo(circleGroup);
+  });
+  L.circleMarker(macau, { radius: 6, color: 'transparent', fillColor: 'transparent', fillOpacity: 0 }).addTo(circleGroup);
+  L.marker(macau, {
+    icon: L.divIcon({
+      html: '<div style="color:#fff;background:rgba(0,0,0,.5);padding:2px 4px;font-size:16px;font-weight:bold;">Macau</div>',
+      iconAnchor: [-5, 0]
+    })
+  }).addTo(circleGroup);
+  circleGroup.addTo(map);
+
+  gridGroup = L.layerGroup();
+  txtGroup  = L.layerGroup();
+  for(let i = 0; i < 12; i++){
+    for(let j = 0; j < 15; j++){
+      const lat1 = 25 - i, lat2 = 24 - i, lon1 = 106 + j, lon2 = 107 + j;
+      const style = getStyle(numGrid[i][j]);
+      L.rectangle([[lat1, lon1], [lat2, lon2]], {
+        color: 'none', fillColor: style.fillColor, fillOpacity: style.fillOpacity
+      }).addTo(gridGroup);
+      const latText = 24.5 - i, lonText = 106.5 + j;
+      L.marker([latText, lonText], {
+        icon: L.divIcon({
+          html: `<span style="color:${style.textColor};font-size:14px">${txtGrid[i][j]}</span>`,
+          className: '', iconSize: null, iconAnchor: [0, 0]
+        })
+      }).addTo(txtGroup);
+    }
+  }
+  gridGroup.addTo(map);
+  txtGroup.addTo(map);
+}
+
+/* ============================================================
+   2. 颱風路徑（永遠最頂層）
+   ============================================================ */
+const levelColor={
+  1:'#808080', 2:'#0571b0', 3:'#4dac26', 4:'#fee08b', 6:'#f16913', 7:'#d73027'
+};
+const levelText={ 1:'TD', 2:'TS', 3:'STS', 4:'TY', 6:'STY', 7:'SuperTY' };
+
+/* 建立獨立 pane + 最高 zIndex */
+map.createPane('typhoonPane');
+map.getPane('typhoonPane').style.zIndex = 1000;
+let trackLayer = L.layerGroup({ pane: 'typhoonPane' });
+trackLayer.addTo(map);
+
+document.getElementById('uploadBtn').addEventListener('click',()=>{
+  const input=document.createElement('input');
+  input.type='file'; input.accept='.csv'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',e=>{
+    const file=e.target.files[0]; if(!file)return;
+    const reader=new FileReader();
+    reader.onload=evt=>{
+      const lines=evt.target.result.split(/\r?\n/).filter(l=>l.trim());
+      if(lines.length<2)return alert('CSV 至少需 2 行');
+      const pts=[];
+      let startIndex=0;
+      if(isNaN(parseFloat(lines[1].split(',')[3])))startIndex=1;
+      for(let i=startIndex;i<lines.length;i++){
+        const cols=lines[i].split(',');
+        if(cols.length<5)continue;
+        const lvl=Number(cols[0]||1);
+        const lat=parseFloat(cols[3]),lon=parseFloat(cols[4]);
+        if(isNaN(lat)||isNaN(lon))continue;
+        pts.push({lat,lon,lvl,name:cols[2]||''});
+      }
+      if(pts.length<2)return alert('有效座標少於 2 點');
+      plotTrack(pts,file.name.replace(/\.csv$/i,''));
+    };
+    reader.readAsText(file);
+    input.remove();
+  });
+  input.click();
+});
+
+function plotTrack(pts,csvName=''){
+  trackLayer.clearLayers();
+  const latlngs=pts.map(p=>[p.lat,p.lon]);
+  L.polyline(latlngs,{color:'#ffffff',weight:4}).addTo(trackLayer);
+  pts.forEach(p=>{
+    const color=levelColor[p.lvl]||'#808080';
+    L.circleMarker([p.lat,p.lon],{radius:6,color:'#fff',weight:1,fillColor:color,fillOpacity:1})
+      .bindTooltip(`${levelText[p.lvl]||'TD'} ‑ ${p.name||''}`.trim()).addTo(trackLayer);
+  });
+  L.marker([pts[0].lat,pts[0].lon],{
+    icon:L.divIcon({html:`<div style="color:#fff;font-size:14px;font-weight:bold;margin-left:12px">${csvName}</div>`,iconAnchor:[-5,0]})
+  }).addTo(trackLayer);
+  map.fitBounds(L.latLngBounds(latlngs),{padding:[20,20]});
+  const lg=document.getElementById('legend');
+  if(lg)lg.remove();
+  const legend=L.control({position:'bottomleft'});
+  legend.onAdd=function(){
+    const div=L.DomUtil.create('div','legend'); div.id='legend'; let html='';
+    [1,2,3,4,6,7].forEach(l=>{
+      html+=`<div class="legend-item"><div class="legend-dot" style="background:${levelColor[l]}"></div>${levelText[l]}</div>`;
+    });
+    div.innerHTML=html; return div;
+  };
+  legend.addTo(map);
+}
+
+document.getElementById('clearGridBtn').addEventListener('click',()=>{
+  if(gridGroup)map.removeLayer(gridGroup);
+  if(txtGroup)map.removeLayer(txtGroup);
+  if(circleGroup)map.removeLayer(circleGroup);
+});
+document.getElementById('clearTrackBtn').addEventListener('click',()=>{
+  trackLayer.clearLayers();
+  const lg=document.getElementById('legend'); if(lg)lg.remove();
+});
+
+/* ============================================================
+   3. 風速箭頭時間序列（站名-only、km/h、月/日+時:分）
+   ============================================================ */
+(function(){
+const $=id=>document.getElementById(id);
+const drop=$('windDrop'),fileInput=$('windFile'),msg=$('windMsg'),err=$('windErr'),stepSel=$('windStep');
+const stnSpan=$('windStn'),infoBox=$('windInfo');
+function ok(t){msg.textContent=t;err.textContent='';}
+function bad(t){err.textContent=t;msg.textContent='';}
+function readText(f){
+  const r=new FileReader();
+  r.onload=e=>{
+    try{ parsePathInfo(f.name||''); go(e.target.result); }catch(ex){bad(ex.message);}
+  };
+  r.readAsText(f,'UTF-8');
+}
+fileInput.onchange=e=>readText(e.target.files[0]);
+['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+  drop.addEventListener(ev,e=>{
+    e.preventDefault();e.stopPropagation();
+    drop.classList.toggle('dragover',ev==='dragenter'||ev==='dragover');
+    if(ev==='drop'&&e.dataTransfer.files[0]) readText(e.dataTransfer.files[0]);
+  });
+});
+stepSel.onchange=()=>{if(lastData) draw(lastData,+stepSel.value);};
+
+function parsePathInfo(filePath){
+  const file=filePath.split(/[\\/]/).pop()||'';
+  let station='未知';
+  const stn=file.match(/WeatherData_([A-Z]{2})/i);
+  if(stn) station=stn[1].toUpperCase();
+  stnSpan.textContent=station;
+  infoBox.style.display='block';
+}
+let lastData=null;
+function go(raw){
+  const rows=raw.trim().split(/\r?\n/).slice(1);
+  const src=[];
+  rows.forEach(l=>{
+    const [dt,dir,spd]=l.split(',');
+    if(!dt||isNaN(dir)||isNaN(spd)) return;
+    const t=new Date(dt.replace(/\//g,'-').replace(' ','T'));
+    if(isNaN(t)) return;
+    src.push({t,dir:Number(dir),spd:Number(spd)});
+  });
+  if(!src.length) throw new Error('CSV 無有效資料');
+  lastData=src;
+  draw(src,+stepSel.value);
+}
+function decimate(arr,n){
+  const out=[];
+  for(let i=0;i<arr.length;i+=n) out.push(arr[i]);
+  return out;
+}
+function draw(arr,n){
+  const data=decimate(arr,n);
+  ok(`讀取 ${data.length} 點，繪製中…`);
+  const cv=$('windCv');
+  const ctx=cv.getContext('2d');
+  const pad={top:25,bot:40,left:45,right:45};
+  const W=cv.width-pad.left-pad.right;
+  const H=cv.height-pad.top-pad.bot;
+  ctx.clearRect(0,0,cv.width,cv.height);
+
+  const tMin=data[0].t, tMax=data[data.length-1].t;
+  const spdMax=Math.ceil(Math.max(...data.map(d=>d.spd))/5)*5;
+  const x=t=>pad.left+(t-tMin)/(tMax-tMin)*W;
+  const y=s=>pad.top+H-(s/spdMax)*H;
+
+  ctx.strokeStyle='#ddd';ctx.lineWidth=1;
+  for(let s=0;s<=spdMax;s+=5){
+    const yy=y(s);
+    ctx.beginPath();ctx.moveTo(pad.left,yy);ctx.lineTo(cv.width-pad.right,yy);ctx.stroke();
+    ctx.fillStyle='#057';ctx.font='12px Arial';
+    ctx.fillText(s,pad.left-30,yy+4);
+  }
+  ctx.fillText('km/h',pad.left-45,pad.top-8);
+
+  const ticks=12;
+  for(let i=0;i<=ticks;i++){
+    const t=new Date(tMin.getTime()+(tMax-tMin)*i/ticks);
+    const xx=x(t);
+    ctx.strokeStyle='#bbb';ctx.beginPath();ctx.moveTo(xx,pad.top);ctx.lineTo(xx,pad.top+H);ctx.stroke();
+    ctx.fillStyle='#000';ctx.fillText(
+      `${t.getMonth()+1}/${t.getDate()} ${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`,
+      xx-35,cv.height-5);
+  }
+
+  data.forEach(p=>drawArrow(ctx,x(p.t),y(p.spd),p.dir,p.spd));
+  ok('');
+}
+function drawArrow(ctx,x,y,dir,spd){
+  const len=30;
+  const wid=Math.min(spd/5,4)+2;
+  const col=spd>15?'#0033cc':spd>10?'#0066ee':'#55aaff';
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate((dir-90)*Math.PI/180);
+
+  ctx.strokeStyle=col;ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(len,0);ctx.stroke();
+
+  ctx.fillStyle=col;
+  ctx.beginPath();
+  ctx.moveTo(0,0);
+  ctx.lineTo(wid,-wid);
+  ctx.lineTo(wid, wid);
+  ctx.closePath();ctx.fill();
+
+  ctx.restore();
+}
+document.getElementById('toggleWindBtn').addEventListener('click',()=>{
+  const p=document.getElementById('windPanel');
+  p.style.display=(p.style.display==='none'?'block':'none');
+  const cv=document.getElementById('windCv');
+  cv.width=900; cv.height=320;
+  if(lastData) draw(lastData,+stepSel.value);
+});
+})();//</script>
+</body>
+</html>
