@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <style>
+  /*==== 同 v4.6 樣式 ====*/
   body{margin:0;font-family:"Segoe UI",Arial;background:#111;color:#eee;}
   h1{margin:10px 0 6px;text-align:center;font-size:1.3rem}
   #ctrl{background:#222;padding:8px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center}
@@ -131,6 +132,7 @@ function getStyle(v){
   return { fillColor, fillOpacity, textColor };
 }
 
+/* ===== 僅保留一份 fileTable ===== */
 const fileTable={
   Summer:{
     td:{ PG:['data/Summer_td_PG_wd_path.txt','data/Summer_td_PG_wd_path_num.txt'],
@@ -209,9 +211,6 @@ const fileTable={
           TV:['data/Autumn_all_TV_wd_path.txt','data/Autumn_all_TV_wd_path_num.txt'] }
   }
 };
-
-/* 空表：由按鈕觸發時動態組檔名 */
-const fileTable={};
 
 let gridGroup, txtGroup, circleGroup, trackLayer;
 
