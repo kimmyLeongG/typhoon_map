@@ -132,7 +132,7 @@ typhoonPaneGroup.addTo(map);
 
 /* ---- 沙灘波專用低層 pane ---- */
 map.createPane('gridPane');
-map.getPane('gridPane').style.zIndex = 400;   // 遠低於 1000
+map.getPane('gridPane').style.zIndex = 200;   // 遠低於 1000
 
 function getStyle(v){
   const level = Math.round(Math.max(0, Math.min(8, v)));
@@ -536,4 +536,5 @@ document.getElementById('toggleWindBtn').addEventListener('click',()=>{
 })();
 </script>
 </body>
+
 </html>
