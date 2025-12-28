@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <style>
-  /*==== 同 v4.7 樣式 ====*/
+  /*==== TC track 樣式 ====*/
   body{margin:0;font-family:"Segoe UI",Arial;background:#111;color:#eee;}
   h1{margin:10px 0 6px;text-align:center;font-size:1.3rem}
   #ctrl{background:#222;padding:8px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center}
@@ -132,7 +132,7 @@ function getStyle(v){
   return { fillColor, fillOpacity, textColor };
 }
 
-/* ===== 僅保留一份 fileTable ===== */
+/* ===== fileTable ===== */
 const fileTable={
   Summer:{
     td:{ PG:['data/Summer_td_PG_wd_path.txt','data/Summer_td_PG_wd_path_num.txt'],
@@ -212,7 +212,7 @@ const fileTable={
   }
 };
 
-let gridGroup, txtGroup, circleGroup;     // ✅ 只宣告一次
+let gridGroup, txtGroup, circleGroup;     // 只宣告一次
 /* 按鈕樣式切換 */
 document.querySelectorAll('#seasonGroup button').forEach(btn=>{
   btn.addEventListener('click',function(){
@@ -294,10 +294,18 @@ function drawGrid(txtData, numData){
 /* ============================================================
    2. 颱風路徑（永遠最頂層）
    ============================================================ */
+/* ========= 路徑顏色對照表 ========= */
 const levelColor={
-  1:'#808080', 2:'#0571b0', 3:'#4dac26', 4:'#fee08b', 6:'#f16913', 7:'#d73027'
+  1:'#808080', // 灰  - TD
+  2:'#0571b0', // 藍  - TS
+  3:'#4dac26', // 綠  - STS
+  4:'#fee08b', // 黃  - TY
+  6:'#f16913', // 橙  - STY
+  7:'#d73027'  // 紅  - SuperTY
 };
-const levelText={ 1:'TD', 2:'TS', 3:'STS', 4:'TY', 6:'STY', 7:'SuperTY' };
+const levelText={
+  1:'TD', 2:'TS', 3:'STS', 4:'TY', 6:'STY', 7:'SuperTY'
+};
 
 /* 建立獨立 pane + 最高 zIndex */
 map.createPane('typhoonPane');
@@ -309,6 +317,7 @@ document.getElementById('uploadBtn').addEventListener('click',()=>{
   const input=document.createElement('input');
   input.type='file'; input.accept='.csv'; input.style.display='none';
   document.body.appendChild(input);
+
   input.addEventListener('change',e=>{
     const file=e.target.files[0]; if(!file)return;
     const reader=new FileReader();
@@ -335,41 +344,68 @@ document.getElementById('uploadBtn').addEventListener('click',()=>{
   input.click();
 });
 
+/* ========= 繪製路徑 + 圓點 + 圖例 ========= */
 function plotTrack(pts,csvName=''){
-  trackLayer.clearLayers();
+  if(trackLayer)map.removeLayer(trackLayer);
+  trackLayer=L.layerGroup();
+
+  /* 白色路徑線 */
   const latlngs=pts.map(p=>[p.lat,p.lon]);
   L.polyline(latlngs,{color:'#ffffff',weight:4}).addTo(trackLayer);
-  pts.forEach(p=>{
+
+  /* 起終點與中途圓點 */
+  pts.forEach((p,idx)=>{
     const color=levelColor[p.lvl]||'#808080';
+    const title=`${levelText[p.lvl]||'TD'} ‑ ${p.name||''}`.trim();
     L.circleMarker([p.lat,p.lon],{radius:6,color:'#fff',weight:1,fillColor:color,fillOpacity:1})
-      .bindTooltip(`${levelText[p.lvl]||'TD'} ‑ ${p.name||''}`.trim()).addTo(trackLayer);
+      .bindTooltip(title,{permanent:false}).addTo(trackLayer);
   });
+
+  /* 起點/終點文字 */
   L.marker([pts[0].lat,pts[0].lon],{
-    icon:L.divIcon({html:`<div style="color:#fff;font-size:14px;font-weight:bold;margin-left:12px">${csvName}</div>`,iconAnchor:[-5,0]})
+    icon:L.divIcon({
+      html:`<div style="color:#fff;font-size:14px;font-weight:bold;margin-left:12px">${csvName}</div>`,
+      className:'',iconAnchor:[0,6]
+    })
   }).addTo(trackLayer);
+
+  trackLayer.addTo(map);
   map.fitBounds(L.latLngBounds(latlngs),{padding:[20,20]});
-  const lg=document.getElementById('legend');
-  if(lg)lg.remove();
+
+  /* ========= 動態圖例 ========= */
+  const existLegend=document.getElementById('legend');
+  if(existLegend)existLegend.remove();
+
   const legend=L.control({position:'bottomleft'});
   legend.onAdd=function(){
-    const div=L.DomUtil.create('div','legend'); div.id='legend'; let html='';
+    const div=L.DomUtil.create('div','legend');
+    div.id='legend';
+    let html='';
     [1,2,3,4,6,7].forEach(l=>{
-      html+=`<div class="legend-item"><div class="legend-dot" style="background:${levelColor[l]}"></div>${levelText[l]}</div>`;
+      html+=`<div class="legend-item">
+               <div class="legend-dot" style="background:${levelColor[l]}"></div>
+               ${levelText[l]}
+             </div>`;
     });
-    div.innerHTML=html; return div;
+    div.innerHTML=html;
+    return div;
   };
   legend.addTo(map);
+  map.fitBounds(L.latLngBounds(latlngs), { padding: [20, 20] });
 }
 
-document.getElementById('clearGridBtn').addEventListener('click',()=>{
-  if(gridGroup)map.removeLayer(gridGroup);
-  if(txtGroup)map.removeLayer(txtGroup);
-  if(circleGroup)map.removeLayer(circleGroup);
+document.getElementById('clearGridBtn').addEventListener('click', () => {
+  if(gridGroup) map.removeLayer(gridGroup);
+  if(txtGroup)  map.removeLayer(txtGroup);
+  if(circleGroup) map.removeLayer(circleGroup);
+  gridGroup = txtGroup = circleGroup = null;
 });
 document.getElementById('clearTrackBtn').addEventListener('click',()=>{
-  trackLayer.clearLayers();
-  const lg=document.getElementById('legend'); if(lg)lg.remove();
+  if(trackLayer){map.removeLayer(trackLayer); trackLayer=null;}
+  const lg=document.getElementById('legend');
+  if(lg)lg.remove();
 });
+})();
 
 /* ============================================================
    3. 風速箭頭時間序列（站名-only、km/h、月/日+時:分）
